@@ -3,7 +3,7 @@ import os
 import sys
 import subprocess
 import argparse  # command line parser
-import fnmatch
+import lz4.frame
 
 # endregion
 
@@ -18,6 +18,8 @@ COMMAND_7Z = "C:\\Program Files\\7-Zip\\7z.exe"
 
 ###############################################################################
 # region Main region
+
+
 def main(arg_list=None):
     ###############################################################################
     # Setup command line argument parsing...
@@ -25,7 +27,7 @@ def main(arg_list=None):
     parser.add_argument('-d', dest='log_dir',
                         help='optional directory containing 7Z CARESCAPE ONE log files to inspect, defaults to '
                              'current directory', required=True)
-    parser.add_argument('-p', dest='log_password', action='store_true', default="helix",
+    parser.add_argument('-p', dest='log_password', default="helix",
                         help='password for log file', required=False)
     parser.add_argument('-v', dest='verbose', default=False, action='store_true',
                         help='verbose output flag', required=False)
@@ -47,18 +49,26 @@ def main(arg_list=None):
     else:
         args.log_dir = os.getcwd()  # use the current directory if none specified
 
+    lz4_list = [x[0] + "/" + f for x in os.walk(args.log_dir) for f in x[2] if f.endswith(".lz4")]
 
     ###############################################################################
-    # Collect a list of log files to inspect...
-    log_files_dict = {}
-    for file in os.listdir(args.log_dir):
-        if fnmatch.fnmatch(file, '* logs.7z'):
-            print(file)
-            full_dir = os.path.splitext(file)[0].replace(" ", "_")  # get basename
-            #full_dir = full_dir.replace(" ", "_")  # replace any spaces with underscore
-            log_files_dict[file] = args.log_dir+"\\"+full_dir
+    # Rip through the list and expand all to a big fat variable...
+    for lz4_file in lz4_list:
+        with lz4.frame.open(lz4_file, mode='r') as fp:
+            try:
+                output_data = fp.read()
+            except:
+                # Unexpected exception.
+                print("Unexpected error :", sys.exc_info()[0])
+                continue;
+            with open(lz4_file.replace('\.lz4', '\.txt'), 'wb') as f:
+                try:
+                    f.write(output_data)
+                except:
+                    # Unexpected exception.
+                    print("Unexpected error :", sys.exc_info()[0])
 
-
+    exit(-1)
 
     ###############################################################################
     # Create directories for each 7z...
@@ -75,12 +85,12 @@ def main(arg_list=None):
     ###############################################################################
     # Unzip to matching directory.
     for log_file, log_dir in log_files_dict.items():
-        the_command = 'x "' + args.log_dir + '\\' + log_file + '"'
-        print(the_command)
-        l = [COMMAND_7Z, the_command, '-p' + args.log_password, '-o' + "'" + log_dir + "'"]
-        print(l)
+        # Build command...
+        the_command = [COMMAND_7Z, 'x', args.log_dir + '\\' + log_file, '-p'+args.log_password, '-o' +
+                       log_dir]
         try:
-            command_output = subprocess.check_output(l)
+            print('Extracting {}...'.format(log_file))
+            command_output = subprocess.check_output(the_command)
         except subprocess.CalledProcessError as e:
             print('*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print(e.output.decode('utf-8'))
@@ -97,6 +107,9 @@ def main(arg_list=None):
             print("Unexpected error:", sys.exc_info()[0])
             print('*** ABORTING ***')
             exit(-2)
+
+    ###############################################################################
+    # Find all the lz4 compressed message files and expand them.
 
     print(log_files_dict)
     return 0
