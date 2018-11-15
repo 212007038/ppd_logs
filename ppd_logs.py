@@ -4,7 +4,7 @@ import sys
 import subprocess
 import argparse  # command line parser
 import lz4.frame
-
+import fnmatch
 # endregion
 
 ###############################################################################
@@ -49,26 +49,15 @@ def main(arg_list=None):
     else:
         args.log_dir = os.getcwd()  # use the current directory if none specified
 
-    lz4_list = [x[0] + "/" + f for x in os.walk(args.log_dir) for f in x[2] if f.endswith(".lz4")]
-
     ###############################################################################
-    # Rip through the list and expand all to a big fat variable...
-    for lz4_file in lz4_list:
-        with lz4.frame.open(lz4_file, mode='r') as fp:
-            try:
-                output_data = fp.read()
-            except:
-                # Unexpected exception.
-                print("Unexpected error :", sys.exc_info()[0])
-                continue;
-            with open(lz4_file.replace('\.lz4', '\.txt'), 'wb') as f:
-                try:
-                    f.write(output_data)
-                except:
-                    # Unexpected exception.
-                    print("Unexpected error :", sys.exc_info()[0])
+    # Build a dictionary of log file names and directories...
+    log_files_dict = {}
+    for file in os.listdir(args.log_dir):
+        if fnmatch.fnmatch(file, 'SNA*.7z'):
+            print(file)
+            full_dir = os.path.splitext(file)[0].replace(" ", "_")  # get basename
+            log_files_dict[file] = args.log_dir+"\\"+full_dir
 
-    exit(-1)
 
     ###############################################################################
     # Create directories for each 7z...
@@ -110,8 +99,31 @@ def main(arg_list=None):
 
     ###############################################################################
     # Find all the lz4 compressed message files and expand them.
+    # Get a list of lz4 files with this really cool list comprehension line...
+    lz4_list = [x[0] + "/" + f for x in os.walk(args.log_dir) for f in x[2] if f.endswith(".lz4")]
 
-    print(log_files_dict)
+    ###############################################################################
+    # Rip through the list and expand all to a big fat variable...
+    # then write to a file.  This is text which will be inspected later.
+    for lz4_file in lz4_list:
+        with lz4.frame.open(lz4_file, mode='r') as fp:
+            try:
+                print("Expanding {}...".format(lz4_file)
+                output_data = fp.read() # expand, this takes a second or so...
+            except:
+                # Unexpected exception.
+                print("Unexpected error :", sys.exc_info()[0])
+                continue;
+            with open(lz4_file.replace('.lz4', '.txt'), 'wb') as f:
+                try:
+                    print("Writing {}...".format(lz4_file))
+                    f.write(output_data)
+                except:
+                    # Unexpected exception.
+                    print("Unexpected error :", sys.exc_info()[0])
+
+
+
     return 0
 
 # endregion
